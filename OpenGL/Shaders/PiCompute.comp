@@ -1,0 +1,90 @@
+#version 430 core
+#extension GL_NV_gpu_shader5: enable
+
+layout (local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+
+// images 
+layout(rgba32f, binding = 0) uniform image2D imgOutput;
+
+layout(std430, binding = 1) buffer VertexBuffer {
+    uint8_t numbers[];
+};
+
+layout (std140, binding = 6) uniform PiUpdate
+{
+    uint textureWidth;
+    uint textureHeight;
+    uint currentWidth;
+    uint groupsOf;
+    uint color;//0 = no, 1 = yes
+    uint offset; 
+    float zoom;
+    float padding;
+};
+
+float getMaxNumber()
+{
+    float theReturn = 0;
+    for(int i = 0; i < groupsOf; i++)
+    {
+        theReturn = theReturn * 10.0 + 9.0;
+    }
+    return theReturn;
+}
+
+vec4 getColorWhite(int number){
+    vec4 theReturn = vec4(0,0,0,1);
+
+    theReturn.x = theReturn.y = theReturn.z = float(number) / getMaxNumber();
+
+    return theReturn;
+}
+
+vec4 getColorRGB(int number){
+    vec4 theReturn = vec4(0,0,0,1);
+
+    float mult = (256*256*256 / getMaxNumber()) - 1;
+
+    number = number * int(mult);
+    int r = (number >> 16) & 0xFF;
+    int g = (number >> 8) & 0xFF;
+    int b = number & 0xFF;
+
+    theReturn.x = (float(r)) / 255;
+    theReturn.y = (float(g)) / 255;
+    theReturn.z = (float(b)) / 255;
+
+    return theReturn;
+}
+
+int getNumber()
+{
+    int number = 0;
+    for(int i = 0; i < groupsOf; i++)
+    {
+        number = number * 10 + int(numbers[(((gl_GlobalInvocationID.x) * groupsOf) + i) + offset]);
+    }
+    return number;
+}
+
+
+void main() 
+{   
+    if(gl_GlobalInvocationID.x > currentWidth * textureHeight)
+    {
+        return;
+    }
+    
+    uint x = gl_GlobalInvocationID.x % currentWidth;
+    uint y = gl_GlobalInvocationID.x / currentWidth;
+
+    int number = getNumber();
+    
+    if(color == 0)
+    {
+        imageStore(imgOutput, ivec2(x,y), getColorWhite(number));
+    }
+    else{
+        imageStore(imgOutput, ivec2(x,y), getColorRGB(number));
+    }
+}
